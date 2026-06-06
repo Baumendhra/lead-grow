@@ -15,6 +15,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedVaultRouteImport } from './routes/_authenticated/vault'
 import { Route as AuthenticatedTeamRouteImport } from './routes/_authenticated/team'
 import { Route as AuthenticatedServicesRouteImport } from './routes/_authenticated/services'
+import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
+import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
 import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
 import { Route as AuthenticatedDealsRouteImport } from './routes/_authenticated/deals'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -49,6 +51,16 @@ const AuthenticatedServicesRoute = AuthenticatedServicesRouteImport.update({
   path: '/services',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedLeadsRoute = AuthenticatedLeadsRouteImport.update({
   id: '/leads',
   path: '/leads',
@@ -77,6 +89,8 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/deals': typeof AuthenticatedDealsRoute
   '/leads': typeof AuthenticatedLeadsRoute
+  '/projects': typeof AuthenticatedProjectsRoute
+  '/reports': typeof AuthenticatedReportsRoute
   '/services': typeof AuthenticatedServicesRoute
   '/team': typeof AuthenticatedTeamRoute
   '/vault': typeof AuthenticatedVaultRoute
@@ -88,6 +102,8 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/deals': typeof AuthenticatedDealsRoute
   '/leads': typeof AuthenticatedLeadsRoute
+  '/projects': typeof AuthenticatedProjectsRoute
+  '/reports': typeof AuthenticatedReportsRoute
   '/services': typeof AuthenticatedServicesRoute
   '/team': typeof AuthenticatedTeamRoute
   '/vault': typeof AuthenticatedVaultRoute
@@ -101,6 +117,8 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/deals': typeof AuthenticatedDealsRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRoute
+  '/_authenticated/projects': typeof AuthenticatedProjectsRoute
+  '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/services': typeof AuthenticatedServicesRoute
   '/_authenticated/team': typeof AuthenticatedTeamRoute
   '/_authenticated/vault': typeof AuthenticatedVaultRoute
@@ -114,6 +132,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/deals'
     | '/leads'
+    | '/projects'
+    | '/reports'
     | '/services'
     | '/team'
     | '/vault'
@@ -125,6 +145,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/deals'
     | '/leads'
+    | '/projects'
+    | '/reports'
     | '/services'
     | '/team'
     | '/vault'
@@ -137,6 +159,8 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/deals'
     | '/_authenticated/leads'
+    | '/_authenticated/projects'
+    | '/_authenticated/reports'
     | '/_authenticated/services'
     | '/_authenticated/team'
     | '/_authenticated/vault'
@@ -192,6 +216,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedServicesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/reports': {
+      id: '/_authenticated/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AuthenticatedReportsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/projects': {
+      id: '/_authenticated/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof AuthenticatedProjectsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/leads': {
       id: '/_authenticated/leads'
       path: '/leads'
@@ -228,6 +266,8 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDealsRoute: typeof AuthenticatedDealsRoute
   AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
+  AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
+  AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedServicesRoute: typeof AuthenticatedServicesRoute
   AuthenticatedTeamRoute: typeof AuthenticatedTeamRoute
   AuthenticatedVaultRoute: typeof AuthenticatedVaultRoute
@@ -238,6 +278,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDealsRoute: AuthenticatedDealsRoute,
   AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
+  AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
+  AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedServicesRoute: AuthenticatedServicesRoute,
   AuthenticatedTeamRoute: AuthenticatedTeamRoute,
   AuthenticatedVaultRoute: AuthenticatedVaultRoute,
