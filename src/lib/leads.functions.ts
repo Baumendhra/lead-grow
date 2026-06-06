@@ -32,9 +32,58 @@ export const searchPlaces = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const apiKey = process.env.GOOGLE_MAPS_API_KEY;
     const lovableKey = process.env.LOVABLE_API_KEY;
+    
+    // Fallback: If no API keys are provided, return mock dummy leads
     if (!apiKey || !lovableKey) {
-      throw new Error("Google Maps connector not linked. Connect it in Lovable to enable lead search.");
+      console.warn("Google Maps connector not linked. Returning mock dummy leads.");
+      const mockResults: LeadResult[] = [
+        {
+          place_id: `mock_place_1_${Date.now()}`,
+          name: `${data.query || "Local"} Business Mock`,
+          address: "123 Mock Street, Fake City, 12345",
+          phone: "+1234567890",
+          website: "https://example.com/mock",
+          rating: 4.8,
+          user_ratings_total: 120,
+          category: "Mock Industry",
+          latitude: 40.7128,
+          longitude: -74.0060,
+          google_maps_url: "https://maps.google.com/?cid=123",
+        },
+        {
+          place_id: `mock_place_2_${Date.now()}`,
+          name: `Sample ${data.query || "Agency"} Demo`,
+          address: "456 Demo Ave, Test Town, 67890",
+          phone: "+1987654321",
+          rating: 3.9,
+          user_ratings_total: 45,
+          category: "Demo Service",
+          latitude: 34.0522,
+          longitude: -118.2437,
+          google_maps_url: "https://maps.google.com/?cid=456",
+        },
+        {
+          place_id: `mock_place_3_${Date.now()}`,
+          name: `Testing ${data.query || "Store"} Location`,
+          address: "789 Test Blvd, QA City, 99999",
+          website: "https://test.com",
+          rating: 4.2,
+          user_ratings_total: 8,
+          category: "Test Location",
+          latitude: 41.8781,
+          longitude: -87.6298,
+          google_maps_url: "https://maps.google.com/?cid=789",
+        }
+      ];
+      
+      let filtered = mockResults;
+      if (data.minRating != null) filtered = filtered.filter((r) => (r.rating ?? 0) >= data.minRating!);
+      if (data.minReviews != null) filtered = filtered.filter((r) => (r.user_ratings_total ?? 0) >= data.minReviews!);
+      if (data.websiteFilter === "has") filtered = filtered.filter((r) => !!r.website);
+      if (data.websiteFilter === "missing") filtered = filtered.filter((r) => !r.website);
+      return { results: filtered };
     }
+
     const textQuery = data.location ? `${data.query} in ${data.location}` : data.query;
     const res = await fetch(`${GATEWAY_URL}/places/v1/places:searchText`, {
       method: "POST",

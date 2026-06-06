@@ -1,7 +1,7 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Users, Briefcase, KeyRound, MapPin, Building2,
-  Layers, Settings, LogOut, Search,
+  Layers, Settings, LogOut, Search, CheckSquare, BarChart3
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,8 @@ const nav = [
   { to: "/clients", label: "CRM", icon: Users },
   { to: "/deals", label: "Deals", icon: Briefcase },
   { to: "/services", label: "Services", icon: Building2 },
+  { to: "/projects", label: "Projects", icon: CheckSquare },
+  { to: "/reports", label: "Reports", icon: BarChart3 },
   { to: "/vault", label: "Vault", icon: KeyRound },
   { to: "/team", label: "Team", icon: Settings },
 ] as const;
