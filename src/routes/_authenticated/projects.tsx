@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Plus, Clock, AlertCircle, CheckCircle2, ChevronRight, ChevronLeft,
-  Layers, User, DollarSign, Calendar, Building2
+  Layers, DollarSign, Calendar, Building2, Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -41,9 +41,12 @@ function ProjectsPage() {
 
   // New Task State
   const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [newTaskDesc, setNewTaskDesc] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState("medium");
   const [newTaskDeadline, setNewTaskDeadline] = useState("");
+
+  // Delete confirm state
+  const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
 
   const { data: user } = useQuery({
     queryKey: ["user"],
@@ -130,7 +133,6 @@ function ProjectsPage() {
       toast.success("Task created");
       setTaskModalOpen(false);
       setNewTaskTitle("");
-      setNewTaskDesc("");
       qc.invalidateQueries({ queryKey: ["tasks"] });
     },
     onError: (e: any) => toast.error(e.message),
@@ -142,6 +144,34 @@ function ProjectsPage() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const deleteProject = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any).from("projects").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Project deleted");
+      setDeleteProjectId(null);
+      if (activeProjectId === deleteProjectId) setActiveProjectId("all");
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const deleteTask = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("tasks").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Task deleted");
+      setDeleteTaskId(null);
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -167,6 +197,30 @@ function ProjectsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Delete Project Confirm */}
+      <Dialog open={!!deleteProjectId} onOpenChange={v => !v && setDeleteProjectId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete project?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">All tasks in this project will also be deleted. This cannot be undone.</p>
+          <div className="flex gap-2 mt-2">
+            <Button variant="outline" className="flex-1" onClick={() => setDeleteProjectId(null)}>Cancel</Button>
+            <Button variant="destructive" className="flex-1" onClick={() => deleteProject.mutate(deleteProjectId!)} disabled={deleteProject.isPending}>Delete</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Task Confirm */}
+      <Dialog open={!!deleteTaskId} onOpenChange={v => !v && setDeleteTaskId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete task?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">This action cannot be undone.</p>
+          <div className="flex gap-2 mt-2">
+            <Button variant="outline" className="flex-1" onClick={() => setDeleteTaskId(null)}>Cancel</Button>
+            <Button variant="destructive" className="flex-1" onClick={() => deleteTask.mutate(deleteTaskId!)} disabled={deleteTask.isPending}>Delete</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -276,7 +330,13 @@ function ProjectsPage() {
               >
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <h3 className="font-semibold text-sm leading-snug">{p.name}</h3>
-                  <Badge variant={cfg.badge} className="text-[10px] shrink-0 capitalize">{cfg.label}</Badge>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Badge variant={cfg.badge} className="text-[10px] capitalize">{cfg.label}</Badge>
+                    <Button size="icon" variant="ghost" className="size-6 text-muted-foreground hover:text-destructive"
+                      onClick={e => { e.stopPropagation(); setDeleteProjectId(p.id); }}>
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
                 </div>
                 {p.description && (
                   <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{p.description}</p>
@@ -433,6 +493,12 @@ function ProjectsPage() {
                           onClick={() => updateTaskStatus.mutate({ id: task.id, status: getNextStatus(task.status)! })}
                         >
                           Next <ChevronRight className="size-3 ml-1" />
+                        </Button>
+                        <Button
+                          variant="ghost" size="sm" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => setDeleteTaskId(task.id)}
+                        >
+                          <Trash2 className="size-3" />
                         </Button>
                       </div>
                     </CardContent>

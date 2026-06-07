@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Download, FileText, DollarSign, Calendar, Building2, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { Plus, Download, FileText, DollarSign, Calendar, Building2, CheckCircle2, Clock, XCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/invoices")({
@@ -31,6 +31,7 @@ function InvoicesPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState("all");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({
     client_id: "none", project_id: "none", amount: "",
     currency: "INR", due_date: "", notes: "", status: "draft",
@@ -98,6 +99,19 @@ function InvoicesPage() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const deleteInvoice = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any).from("invoices").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Invoice deleted");
+      setDeleteId(null);
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   function exportCSV() {
     if (invoices.length === 0) return toast.error("No invoices to export");
     const headers = ["Invoice No", "Client", "Project", "Amount", "Currency", "Status", "Due Date", "Created"];
@@ -123,6 +137,18 @@ function InvoicesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Delete confirm */}
+      <Dialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete invoice?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">This action cannot be undone.</p>
+          <div className="flex gap-2 mt-2">
+            <Button variant="outline" className="flex-1" onClick={() => setDeleteId(null)}>Cancel</Button>
+            <Button variant="destructive" className="flex-1" onClick={() => deleteInvoice.mutate(deleteId!)} disabled={deleteInvoice.isPending}>Delete</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="font-display text-3xl font-semibold">Invoices</h1>
@@ -281,6 +307,10 @@ function InvoicesPage() {
                           {Object.entries(STATUS_STYLES).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
+                      <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeleteId(inv.id)}>
+                        <Trash2 className="size-4" />
+                      </Button>
                     </div>
                   </div>
                 </CardContent>

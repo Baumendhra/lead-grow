@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { KeyRound, Plus, Eye, EyeOff, Copy, Layers, Globe } from "lucide-react";
+import { KeyRound, Plus, Eye, EyeOff, Copy, Layers, Globe, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/vault")({
@@ -41,7 +41,7 @@ function decodeBytea(v: any): string {
   return "";
 }
 
-function CredCard({ c, onReveal, revealed }: { c: any; onReveal: () => void; revealed: boolean }) {
+function CredCard({ c, onReveal, revealed, onDelete }: { c: any; onReveal: () => void; revealed: boolean; onDelete: () => void }) {
   const secret = decodeBytea(c.secret_encrypted);
   return (
     <Card className="surface-card p-4 space-y-2">
@@ -50,7 +50,12 @@ function CredCard({ c, onReveal, revealed }: { c: any; onReveal: () => void; rev
           <p className="font-medium text-sm">{c.label}</p>
           <p className="text-xs text-muted-foreground capitalize">{c.kind.replace("_", " ")}{c.username ? ` · ${c.username}` : ""}</p>
         </div>
-        <KeyRound className="size-4 text-muted-foreground shrink-0" />
+        <div className="flex items-center gap-1">
+          <KeyRound className="size-4 text-muted-foreground" />
+          <Button size="icon" variant="ghost" className="size-7 text-muted-foreground hover:text-destructive" onClick={onDelete}>
+            <Trash2 className="size-3.5" />
+          </Button>
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <Input readOnly type={revealed ? "text" : "password"} value={secret} className="font-mono text-sm" />
@@ -72,6 +77,7 @@ function VaultPage() {
   const [reveal, setReveal] = useState<Record<string, boolean>>({});
   const [activeSection, setActiveSection] = useState<"general" | "project">("general");
   const [filterProjectId, setFilterProjectId] = useState("all");
+  const [deleteCredId, setDeleteCredId] = useState<string | null>(null);
   const [form, setForm] = useState({
     label: "", kind: "password", username: "", secret: "", notes: "",
     project_id: "none",
@@ -120,6 +126,19 @@ function VaultPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const deleteCred = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any).from("credentials").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Credential deleted");
+      setDeleteCredId(null);
+      qc.invalidateQueries({ queryKey: ["credentials"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   function generate() {
     const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
     let s = ""; const arr = new Uint32Array(20);
@@ -143,6 +162,18 @@ function VaultPage() {
 
   return (
     <div className="space-y-6">
+      {/* Delete confirm */}
+      <Dialog open={!!deleteCredId} onOpenChange={v => !v && setDeleteCredId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete credential?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">This action cannot be undone.</p>
+          <div className="flex gap-2 mt-2">
+            <Button variant="outline" className="flex-1" onClick={() => setDeleteCredId(null)}>Cancel</Button>
+            <Button variant="destructive" className="flex-1" onClick={() => deleteCred.mutate(deleteCredId!)} disabled={deleteCred.isPending}>Delete</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="font-display text-3xl font-semibold">Credential Vault</h1>
@@ -235,7 +266,8 @@ function VaultPage() {
             <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
               {generalCreds.map((c: any) => (
                 <CredCard key={c.id} c={c} revealed={!!reveal[c.id]}
-                  onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))} />
+                  onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))}
+                  onDelete={() => setDeleteCredId(c.id)} />
               ))}
             </div>
           )}
@@ -276,7 +308,8 @@ function VaultPage() {
                     <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
                       {(pCreds as any[]).map((c: any) => (
                         <CredCard key={c.id} c={c} revealed={!!reveal[c.id]}
-                          onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))} />
+                          onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))}
+                          onDelete={() => setDeleteCredId(c.id)} />
                       ))}
                     </div>
                   </div>
@@ -295,7 +328,8 @@ function VaultPage() {
                 <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
                   {filteredProjectCreds.map((c: any) => (
                     <CredCard key={c.id} c={c} revealed={!!reveal[c.id]}
-                      onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))} />
+                      onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))}
+                      onDelete={() => setDeleteCredId(c.id)} />
                   ))}
                 </div>
               )}
