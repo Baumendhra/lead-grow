@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
-  Plus, Building2, Trash2, ChevronDown, ChevronUp,
+  Plus, Building2, Trash2, ChevronDown, ChevronUp, Pencil,
   Layers, DollarSign, Receipt, Mail, Phone, Globe
 } from "lucide-react";
 import { toast } from "sonner";
@@ -24,6 +24,7 @@ function ClientsPage() {
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editClientId, setEditClientId] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "", company: "", industry: "", website: "", phone: "", email: "", notes: "",
   });
@@ -62,21 +63,44 @@ function ClientsPage() {
     },
   });
 
-  const create = useMutation({
+  const saveClient = useMutation({
     mutationFn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) throw new Error("Not signed in");
-      const { error } = await supabase.from("clients").insert({ ...form, created_by: u.user.id, owner_id: u.user.id });
-      if (error) throw error;
+      if (editClientId) {
+        const { error } = await supabase.from("clients").update({ ...form }).eq("id", editClientId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("clients").insert({ ...form, created_by: u.user.id, owner_id: u.user.id });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      toast.success("Client added");
+      toast.success(editClientId ? "Client updated" : "Client added");
       setOpen(false);
+      setEditClientId(null);
       setForm({ name: "", company: "", industry: "", website: "", phone: "", email: "", notes: "" });
       qc.invalidateQueries({ queryKey: ["clients"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  function openEdit(c: any) {
+    setForm({
+      name: c.name || "", company: c.company || "", industry: c.industry || "",
+      website: c.website || "", phone: c.phone || "", email: c.email || "", notes: c.notes || ""
+    });
+    setEditClientId(c.id);
+    setOpen(true);
+  }
+
+  function handleOpenChange(v: boolean) {
+    setOpen(v);
+    if (!v) {
+      setEditClientId(null);
+      setForm({ name: "", company: "", industry: "", website: "", phone: "", email: "", notes: "" });
+    }
+  }
 
   const deleteClient = useMutation({
     mutationFn: async (id: string) => {
@@ -107,10 +131,14 @@ function ClientsPage() {
           <h1 className="font-display text-3xl font-semibold">CRM — Clients</h1>
           <p className="text-muted-foreground">{clients.length} client{clients.length === 1 ? "" : "s"}</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button><Plus className="size-4 mr-1" />New client</Button></DialogTrigger>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+          <DialogTrigger asChild>
+            <Button onClick={() => { setEditClientId(null); setForm({ name: "", company: "", industry: "", website: "", phone: "", email: "", notes: "" }); }}>
+              <Plus className="size-4 mr-1" />New client
+            </Button>
+          </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>New client</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editClientId ? "Edit client" : "New client"}</DialogTitle></DialogHeader>
             <div className="grid gap-3">
               <div className="grid gap-1"><Label>Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-3">
@@ -125,7 +153,9 @@ function ClientsPage() {
               <div className="grid gap-1"><Label>Notes</Label><Textarea rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></div>
             </div>
             <DialogFooter>
-              <Button onClick={() => create.mutate()} disabled={!form.name || create.isPending}>Create</Button>
+              <Button onClick={() => saveClient.mutate()} disabled={!form.name || saveClient.isPending}>
+                {editClientId ? "Save changes" : "Create"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -170,6 +200,10 @@ function ClientsPage() {
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <Badge variant={c.status === "active" ? "default" : "secondary"} className="capitalize text-[10px]">{c.status}</Badge>
+                      <Button size="icon" variant="ghost" className="size-7 text-muted-foreground hover:text-primary"
+                        onClick={() => openEdit(c)}>
+                        <Pencil className="size-3.5" />
+                      </Button>
                       <Button size="icon" variant="ghost" className="size-7 text-muted-foreground hover:text-destructive"
                         onClick={() => setDeleteId(c.id)}>
                         <Trash2 className="size-3.5" />

@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Download, FileText, DollarSign, Calendar, Building2, CheckCircle2, Clock, XCircle, Trash2 } from "lucide-react";
+import { Plus, Download, FileText, DollarSign, Calendar, Building2, CheckCircle2, Clock, XCircle, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/invoices")({
@@ -32,6 +32,7 @@ function InvoicesPage() {
   const [open, setOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState("all");
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editInvoiceId, setEditInvoiceId] = useState<string | null>(null);
   const [form, setForm] = useState({
     client_id: "none", project_id: "none", amount: "",
     currency: "INR", due_date: "", notes: "", status: "draft",
@@ -65,11 +66,11 @@ function InvoicesPage() {
     },
   });
 
-  const createInvoice = useMutation({
+  const saveInvoice = useMutation({
     mutationFn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) throw new Error("Not signed in");
-      const { error } = await (supabase as any).from("invoices").insert({
+      const payload = {
         client_id: form.client_id === "none" ? null : form.client_id,
         project_id: form.project_id === "none" ? null : form.project_id,
         amount: Number(form.amount),
@@ -77,18 +78,47 @@ function InvoicesPage() {
         due_date: form.due_date || null,
         notes: form.notes || null,
         status: form.status,
-        created_by: u.user.id,
-      });
-      if (error) throw error;
+      };
+
+      if (editInvoiceId) {
+        const { error } = await (supabase as any).from("invoices").update(payload).eq("id", editInvoiceId);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any).from("invoices").insert({ ...payload, created_by: u.user.id });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      toast.success("Invoice created");
+      toast.success(editInvoiceId ? "Invoice updated" : "Invoice created");
       setOpen(false);
+      setEditInvoiceId(null);
       setForm({ client_id: "none", project_id: "none", amount: "", currency: "INR", due_date: "", notes: "", status: "draft" });
       qc.invalidateQueries({ queryKey: ["invoices"] });
     },
     onError: (e: any) => toast.error(e.message),
   });
+
+  function openEdit(inv: any) {
+    setForm({
+      client_id: inv.client_id || "none",
+      project_id: inv.project_id || "none",
+      amount: inv.amount ? String(inv.amount) : "",
+      currency: inv.currency || "INR",
+      due_date: inv.due_date || "",
+      notes: inv.notes || "",
+      status: inv.status || "draft",
+    });
+    setEditInvoiceId(inv.id);
+    setOpen(true);
+  }
+
+  function handleOpenChange(v: boolean) {
+    setOpen(v);
+    if (!v) {
+      setEditInvoiceId(null);
+      setForm({ client_id: "none", project_id: "none", amount: "", currency: "INR", due_date: "", notes: "", status: "draft" });
+    }
+  }
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
@@ -156,10 +186,14 @@ function InvoicesPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={exportCSV}><Download className="size-4 mr-2" />Export CSV</Button>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button><Plus className="size-4 mr-2" />New Invoice</Button></DialogTrigger>
+          <Dialog open={open} onOpenChange={handleOpenChange}>
+            <DialogTrigger asChild>
+              <Button onClick={() => { handleOpenChange(false); setOpen(true); }}>
+                <Plus className="size-4 mr-2" />New Invoice
+              </Button>
+            </DialogTrigger>
             <DialogContent className="max-w-md">
-              <DialogHeader><DialogTitle>Create Invoice</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{editInvoiceId ? "Edit Invoice" : "Create Invoice"}</DialogTitle></DialogHeader>
               <div className="space-y-4 py-2">
                 <div className="space-y-1.5">
                   <Label>Client</Label>
@@ -226,7 +260,9 @@ function InvoicesPage() {
                   <Label>Notes</Label>
                   <Textarea rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Invoice notes or payment terms..." />
                 </div>
-                <Button onClick={() => createInvoice.mutate()} disabled={!form.amount || createInvoice.isPending} className="w-full">Create Invoice</Button>
+                <Button onClick={() => saveInvoice.mutate()} disabled={!form.amount || saveInvoice.isPending} className="w-full">
+                  {editInvoiceId ? "Save Changes" : "Create Invoice"}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -307,6 +343,10 @@ function InvoicesPage() {
                           {Object.entries(STATUS_STYLES).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
+                      <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-primary"
+                        onClick={() => openEdit(inv)}>
+                        <Pencil className="size-4" />
+                      </Button>
                       <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive"
                         onClick={() => setDeleteId(inv.id)}>
                         <Trash2 className="size-4" />

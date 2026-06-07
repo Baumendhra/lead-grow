@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Plus, Clock, AlertCircle, CheckCircle2, ChevronRight, ChevronLeft,
-  Layers, DollarSign, Calendar, Building2, Trash2, Link
+  Layers, DollarSign, Calendar, Building2, Trash2, Link, Pencil
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -48,6 +48,10 @@ function ProjectsPage() {
   // Delete confirm state
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
+
+  // Edit state
+  const [editProjectId, setEditProjectId] = useState<string | null>(null);
+  const [editTaskId, setEditTaskId] = useState<string | null>(null);
 
   const { data: user } = useQuery({
     queryKey: ["user"],
@@ -88,24 +92,31 @@ function ProjectsPage() {
     },
   });
 
-  const createProject = useMutation({
+  const saveProject = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Not logged in");
-      const { error } = await (supabase as any).from("projects").insert({
+      const payload = {
         name: newProjectName,
         description: newProjectDesc,
-        sold_price: newProjectPrice ? Number(newProjectPrice) : undefined,
-        client_id: newProjectClientId === "none" ? undefined : newProjectClientId,
+        sold_price: newProjectPrice ? Number(newProjectPrice) : null,
+        client_id: newProjectClientId === "none" ? null : newProjectClientId,
         status: newProjectStatus,
         deadline: newProjectDeadline || null,
         project_url: newProjectUrl || null,
-        created_by: user.id,
-      });
-      if (error) throw error;
+      };
+
+      if (editProjectId) {
+        const { error } = await (supabase as any).from("projects").update(payload).eq("id", editProjectId);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any).from("projects").insert({ ...payload, created_by: user.id });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      toast.success("Project created");
+      toast.success(editProjectId ? "Project updated" : "Project created");
       setProjectModalOpen(false);
+      setEditProjectId(null);
       setNewProjectName("");
       setNewProjectDesc("");
       setNewProjectPrice("");
@@ -118,28 +129,78 @@ function ProjectsPage() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  const createTask = useMutation({
+  const saveTask = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Not logged in");
-      const pid = activeProjectId === "all" ? (projects[0]?.id || null) : activeProjectId;
-      if (!pid && projects.length === 0) throw new Error("Create a project first");
-      const { error } = await (supabase as any).from("tasks").insert({
-        project_id: pid,
+      const payload = {
         title: newTaskTitle,
         priority: newTaskPriority,
         deadline: newTaskDeadline || null,
-        created_by: user.id,
-      });
-      if (error) throw error;
+      };
+
+      if (editTaskId) {
+        const { error } = await supabase.from("tasks").update(payload).eq("id", editTaskId);
+        if (error) throw error;
+      } else {
+        const pid = activeProjectId === "all" ? (projects[0]?.id || null) : activeProjectId;
+        if (!pid && projects.length === 0) throw new Error("Create a project first");
+        const { error } = await supabase.from("tasks").insert({ ...payload, project_id: pid, created_by: user.id });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      toast.success("Task created");
+      toast.success(editTaskId ? "Task updated" : "Task created");
       setTaskModalOpen(false);
+      setEditTaskId(null);
       setNewTaskTitle("");
       qc.invalidateQueries({ queryKey: ["tasks"] });
     },
     onError: (e: any) => toast.error(e.message),
   });
+
+  function openEditProject(p: any) {
+    setNewProjectName(p.name || "");
+    setNewProjectDesc(p.description || "");
+    setNewProjectPrice(p.sold_price ? String(p.sold_price) : "");
+    setNewProjectClientId(p.client_id || "none");
+    setNewProjectStatus(p.status || "active");
+    setNewProjectDeadline(p.deadline || "");
+    setNewProjectUrl(p.project_url || "");
+    setEditProjectId(p.id);
+    setProjectModalOpen(true);
+  }
+
+  function handleProjectModalChange(v: boolean) {
+    setProjectModalOpen(v);
+    if (!v) {
+      setEditProjectId(null);
+      setNewProjectName("");
+      setNewProjectDesc("");
+      setNewProjectPrice("");
+      setNewProjectClientId("none");
+      setNewProjectStatus("active");
+      setNewProjectDeadline("");
+      setNewProjectUrl("");
+    }
+  }
+
+  function openEditTask(t: any) {
+    setNewTaskTitle(t.title || "");
+    setNewTaskPriority(t.priority || "medium");
+    setNewTaskDeadline(t.deadline || "");
+    setEditTaskId(t.id);
+    setTaskModalOpen(true);
+  }
+
+  function handleTaskModalChange(v: boolean) {
+    setTaskModalOpen(v);
+    if (!v) {
+      setEditTaskId(null);
+      setNewTaskTitle("");
+      setNewTaskPriority("medium");
+      setNewTaskDeadline("");
+    }
+  }
 
   const updateTaskStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
@@ -232,14 +293,14 @@ function ProjectsPage() {
             {projects.length} project{projects.length !== 1 ? "s" : ""} · Total value: ₹{totalRevenue.toLocaleString()}
           </p>
         </div>
-        <Dialog open={isProjectModalOpen} onOpenChange={setProjectModalOpen}>
+        <Dialog open={isProjectModalOpen} onOpenChange={handleProjectModalChange}>
           <DialogTrigger asChild>
-            <Button variant="outline">
+            <Button variant="outline" onClick={() => { handleProjectModalChange(false); setProjectModalOpen(true); }}>
               <Plus className="size-4 mr-2" /> New Project
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Create Project</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editProjectId ? "Edit Project" : "Create Project"}</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-1.5">
                 <Label>Project Name *</Label>
@@ -310,8 +371,8 @@ function ProjectsPage() {
                 </Select>
               </div>
 
-              <Button onClick={() => createProject.mutate()} disabled={!newProjectName || createProject.isPending} className="w-full">
-                Create Project
+              <Button onClick={() => saveProject.mutate()} disabled={!newProjectName || saveProject.isPending} className="w-full">
+                {editProjectId ? "Save Changes" : "Create Project"}
               </Button>
             </div>
           </DialogContent>
@@ -343,6 +404,10 @@ function ProjectsPage() {
                   <h3 className="font-semibold text-sm leading-snug">{p.name}</h3>
                   <div className="flex items-center gap-1 shrink-0">
                     <Badge variant={cfg.badge} className="text-[10px] capitalize">{cfg.label}</Badge>
+                    <Button size="icon" variant="ghost" className="size-6 text-muted-foreground hover:text-primary"
+                      onClick={e => { e.stopPropagation(); openEditProject(p); }}>
+                      <Pencil className="size-3" />
+                    </Button>
                     <Button size="icon" variant="ghost" className="size-6 text-muted-foreground hover:text-destructive"
                       onClick={e => { e.stopPropagation(); setDeleteProjectId(p.id); }}>
                       <Trash2 className="size-3" />
@@ -406,12 +471,14 @@ function ProjectsPage() {
             </SelectContent>
           </Select>
 
-          <Dialog open={isTaskModalOpen} onOpenChange={setTaskModalOpen}>
+          <Dialog open={isTaskModalOpen} onOpenChange={handleTaskModalChange}>
             <DialogTrigger asChild>
-              <Button><Plus className="size-4 mr-2" /> New Task</Button>
+              <Button onClick={() => { handleTaskModalChange(false); setTaskModalOpen(true); }}>
+                <Plus className="size-4 mr-2" /> New Task
+              </Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Create Task</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{editTaskId ? "Edit Task" : "Create Task"}</DialogTitle></DialogHeader>
               <div className="space-y-4 py-2">
                 <div className="space-y-1.5">
                   <Label>Title *</Label>
@@ -439,8 +506,8 @@ function ProjectsPage() {
                     Task will be added to: <strong>{projects[0]?.name}</strong>. Select a specific project to assign elsewhere.
                   </p>
                 )}
-                <Button onClick={() => createTask.mutate()} disabled={!newTaskTitle || createTask.isPending} className="w-full">
-                  Create Task
+                <Button onClick={() => saveTask.mutate()} disabled={!newTaskTitle || saveTask.isPending} className="w-full">
+                  {editTaskId ? "Save Changes" : "Create Task"}
                 </Button>
               </div>
             </DialogContent>
@@ -509,6 +576,12 @@ function ProjectsPage() {
                           onClick={() => updateTaskStatus.mutate({ id: task.id, status: getNextStatus(task.status)! })}
                         >
                           Next <ChevronRight className="size-3 ml-1" />
+                        </Button>
+                        <Button
+                          variant="ghost" size="sm" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-primary"
+                          onClick={() => openEditTask(task)}
+                        >
+                          <Pencil className="size-3" />
                         </Button>
                         <Button
                           variant="ghost" size="sm" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"

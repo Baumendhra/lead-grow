@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { KeyRound, Plus, Eye, EyeOff, Copy, Layers, Globe, Trash2, Lock, Unlock } from "lucide-react";
+import { KeyRound, Plus, Eye, EyeOff, Copy, Layers, Globe, Trash2, Lock, Unlock, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/vault")({
@@ -41,7 +41,7 @@ function decodeBytea(v: any): string {
   return "";
 }
 
-function CredCard({ c, onReveal, revealed, onDelete }: { c: any; onReveal: () => void; revealed: boolean; onDelete: () => void }) {
+function CredCard({ c, onReveal, revealed, onDelete, onEdit }: { c: any; onReveal: () => void; revealed: boolean; onDelete: () => void; onEdit: () => void }) {
   const secret = decodeBytea(c.secret_encrypted);
   return (
     <Card className="surface-card p-4 space-y-2">
@@ -51,7 +51,10 @@ function CredCard({ c, onReveal, revealed, onDelete }: { c: any; onReveal: () =>
           <p className="text-xs text-muted-foreground capitalize">{c.kind.replace("_", " ")}{c.username ? ` · ${c.username}` : ""}</p>
         </div>
         <div className="flex items-center gap-1">
-          <KeyRound className="size-4 text-muted-foreground" />
+          <KeyRound className="size-4 text-muted-foreground mr-1" />
+          <Button size="icon" variant="ghost" className="size-7 text-muted-foreground hover:text-primary" onClick={onEdit}>
+            <Pencil className="size-3.5" />
+          </Button>
           <Button size="icon" variant="ghost" className="size-7 text-muted-foreground hover:text-destructive" onClick={onDelete}>
             <Trash2 className="size-3.5" />
           </Button>
@@ -115,6 +118,7 @@ function VaultPage() {
   const [activeSection, setActiveSection] = useState<"general" | "project">("general");
   const [filterProjectId, setFilterProjectId] = useState("all");
   const [deleteCredId, setDeleteCredId] = useState<string | null>(null);
+  const [editCredId, setEditCredId] = useState<string | null>(null);
   const [form, setForm] = useState({
     label: "", kind: "password", username: "", secret: "", notes: "",
     project_id: "none",
@@ -153,27 +157,56 @@ function VaultPage() {
     retry: false,
   });
 
-  const create = useMutation({
+  const saveCred = useMutation({
     mutationFn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) throw new Error("Not signed in");
       const enc = obf(form.secret);
-      const { error } = await (supabase as any).from("credentials").insert({
+      const payload = {
         label: form.label, kind: form.kind, username: form.username,
         notes: form.notes, secret_encrypted: toHex(enc),
         project_id: form.project_id === "none" ? null : form.project_id,
-        created_by: u.user.id,
-      });
-      if (error) throw error;
+      };
+
+      if (editCredId) {
+        const { error } = await (supabase as any).from("credentials").update(payload).eq("id", editCredId);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any).from("credentials").insert({ ...payload, created_by: u.user.id });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      toast.success("Credential saved");
+      toast.success(editCredId ? "Credential updated" : "Credential saved");
       setOpen(false);
+      setEditCredId(null);
       setForm({ label: "", kind: "password", username: "", secret: "", notes: "", project_id: "none" });
       qc.invalidateQueries({ queryKey: ["credentials"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  function openEdit(c: any) {
+    const secret = decodeBytea(c.secret_encrypted);
+    setForm({
+      label: c.label || "",
+      kind: c.kind || "password",
+      username: c.username || "",
+      secret: secret,
+      notes: c.notes || "",
+      project_id: c.project_id || "none",
+    });
+    setEditCredId(c.id);
+    setOpen(true);
+  }
+
+  function handleOpenChange(v: boolean) {
+    setOpen(v);
+    if (!v) {
+      setEditCredId(null);
+      setForm({ label: "", kind: "password", username: "", secret: "", notes: "", project_id: "none" });
+    }
+  }
 
   const deleteCred = useMutation({
     mutationFn: async (id: string) => {
@@ -259,10 +292,14 @@ function VaultPage() {
           <h1 className="font-display text-3xl font-semibold">Credential Vault</h1>
           <p className="text-muted-foreground">Admin & owner access only · {creds.length} stored</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button><Plus className="size-4 mr-1" />New credential</Button></DialogTrigger>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+          <DialogTrigger asChild>
+            <Button onClick={() => { handleOpenChange(false); setOpen(true); }}>
+              <Plus className="size-4 mr-1" />New credential
+            </Button>
+          </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>New credential</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editCredId ? "Edit credential" : "New credential"}</DialogTitle></DialogHeader>
             <div className="grid gap-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-1"><Label>Label *</Label>
@@ -307,7 +344,9 @@ function VaultPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={() => create.mutate()} disabled={!form.label || !form.secret || create.isPending}>Save</Button>
+              <Button onClick={() => saveCred.mutate()} disabled={!form.label || !form.secret || saveCred.isPending}>
+                {editCredId ? "Save changes" : "Save"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -363,6 +402,7 @@ function VaultPage() {
                   {generalCreds.map((c: any) => (
                     <CredCard key={c.id} c={c} revealed={!!reveal[c.id]}
                       onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))}
+                      onEdit={() => openEdit(c)}
                       onDelete={() => setDeleteCredId(c.id)} />
                   ))}
                 </div>
@@ -426,6 +466,7 @@ function VaultPage() {
                         {(pCreds as any[]).map((c: any) => (
                           <CredCard key={c.id} c={c} revealed={!!reveal[c.id]}
                             onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))}
+                            onEdit={() => openEdit(c)}
                             onDelete={() => setDeleteCredId(c.id)} />
                         ))}
                       </div>
@@ -474,6 +515,7 @@ function VaultPage() {
                     {filteredProjectCreds.map((c: any) => (
                       <CredCard key={c.id} c={c} revealed={!!reveal[c.id]}
                         onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))}
+                        onEdit={() => openEdit(c)}
                         onDelete={() => setDeleteCredId(c.id)} />
                     ))}
                   </div>
