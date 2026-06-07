@@ -4,10 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Users, MapPin, Briefcase, DollarSign, Calendar, TrendingUp, KeyRound, Activity,
-  BellRing, AlertTriangle
+  Users, DollarSign, Calendar, TrendingUp, Activity,
+  BellRing, CheckSquare, Layers
 } from "lucide-react";
-import { 
+import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
 } from "recharts";
 
@@ -15,7 +15,9 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
 });
 
-function Stat({ icon: Icon, label, value, hint, trend }: { icon: any; label: string; value: string; hint?: string; trend?: "up" | "down" | "neutral" }) {
+function Stat({ icon: Icon, label, value, hint, trend, color = "text-primary" }: {
+  icon: any; label: string; value: string; hint?: string; trend?: "up" | "down" | "neutral"; color?: string;
+}) {
   return (
     <Card className="surface-card hover:bg-muted/10 transition-colors">
       <CardContent className="p-5">
@@ -32,7 +34,7 @@ function Stat({ icon: Icon, label, value, hint, trend }: { icon: any; label: str
             )}
           </div>
           <div className="size-10 rounded-xl bg-primary/10 grid place-items-center">
-            <Icon className="size-5 text-primary" />
+            <Icon className={`size-5 ${color}`} />
           </div>
         </div>
       </CardContent>
@@ -44,49 +46,45 @@ function Dashboard() {
   const { data } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
-      const [leads, clients, deals, services, activities, tasks] = await Promise.all([
-        supabase.from("leads").select("id, status, score, created_at", { count: "exact" }),
-        supabase.from("clients").select("id, status", { count: "exact" }),
-        supabase.from("deals").select("id, value, stage, currency, created_at"),
-        supabase.from("services").select("id, name, monthly_cost, renewal_date, status"),
+      const [projectsRes, tasksRes, clientsRes, activitiesRes] = await Promise.all([
+        supabase.from("projects").select("id, name, status, sold_price, created_at, client_id") as any,
+        supabase.from("tasks").select("id, title, status, deadline, priority").order("created_at", { ascending: false }),
+        supabase.from("clients").select("id, status"),
         supabase.from("activities").select("id, type, content, created_at, entity_type").order("created_at", { ascending: false }).limit(6),
-        supabase.from("tasks").select("id, title, status, deadline").in('status', ['todo', 'in_progress']).order("deadline", { ascending: true }).limit(5),
       ]);
+
+      const projects: any[] = (projectsRes as any).data ?? [];
+      const tasks = tasksRes.data ?? [];
+      const clients = clientsRes.data ?? [];
+
+      // Revenue chart: group sold_price by month
+      const revenueByMonth = projects.reduce((acc: Record<string, number>, p) => {
+        const month = new Date(p.created_at).toLocaleString("default", { month: "short", year: "2-digit" });
+        acc[month] = (acc[month] || 0) + Number(p.sold_price || 0);
+        return acc;
+      }, {});
+      const revenueChartData = Object.entries(revenueByMonth).map(([name, value]) => ({ name, value }));
+
+      const pendingTasks = tasks.filter(t => t.status !== "done");
+      const upcomingDeadlines = pendingTasks
+        .filter(t => t.deadline)
+        .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime())
+        .slice(0, 5);
+
       return {
-        leadsCount: leads.count ?? 0,
-        leadsHigh: (leads.data ?? []).filter(l => l.score === "high").length,
-        clientsCount: (clients.data ?? []).filter(c => c.status === "active").length,
-        dealsOpen: (deals.data ?? []).filter(d => !["won", "lost"].includes(d.stage)),
-        dealsWon: (deals.data ?? []).filter(d => d.stage === "won"),
-        services: services.data ?? [],
-        activities: activities.data ?? [],
-        tasks: tasks.data ?? [],
-        allDeals: deals.data ?? [],
+        projects,
+        tasks,
+        clients,
+        activities: activitiesRes.data ?? [],
+        revenueChartData,
+        pendingTasks,
+        upcomingDeadlines,
+        totalRevenue: projects.reduce((s, p) => s + Number(p.sold_price || 0), 0),
+        activeClients: clients.filter(c => c.status === "active").length,
+        activeProjects: projects.filter(p => p.status === "active").length,
       };
     },
   });
-
-  const monthlyRevenue = (data?.dealsWon ?? []).reduce((s, d) => s + Number(d.value || 0), 0);
-  const pipelineValue = (data?.dealsOpen ?? []).reduce((s, d) => s + Number(d.value || 0), 0);
-  const monthlyCost = (data?.services ?? []).reduce((s, x: any) => s + Number(x.monthly_cost || 0), 0);
-  
-  const upcomingRenewals = (data?.services ?? []).filter((s: any) => {
-    if (!s.renewal_date) return false;
-    const days = (new Date(s.renewal_date).getTime() - Date.now()) / 86400000;
-    return days >= 0 && days <= 30;
-  });
-
-  // Generate fake revenue timeline data based on deals won
-  const revenueChartData = (data?.allDeals ?? []).reduce((acc: any[], deal) => {
-    const month = new Date(deal.created_at).toLocaleString('default', { month: 'short' });
-    const existing = acc.find(x => x.name === month);
-    if (existing) {
-      existing.value += deal.value || 0;
-    } else {
-      acc.push({ name: month, value: deal.value || 0 });
-    }
-    return acc;
-  }, []);
 
   return (
     <div className="space-y-6">
@@ -97,78 +95,84 @@ function Dashboard() {
         </div>
       </div>
 
+      {/* Stats Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat icon={MapPin} label="Total Leads" value={String(data?.leadsCount ?? 0)} hint={`${data?.leadsHigh ?? 0} high potential`} trend="up" />
-        <Stat icon={Users} label="Active Clients" value={String(data?.clientsCount ?? 0)} hint="Stable" trend="neutral" />
-        <Stat icon={Briefcase} label="Pipeline" value={`$${pipelineValue.toLocaleString()}`} hint={`${data?.dealsOpen?.length ?? 0} active deals`} />
-        <Stat icon={DollarSign} label="Revenue (Won)" value={`$${monthlyRevenue.toLocaleString()}`} hint="Last 30 days" trend="up" />
+        <Stat icon={Layers} label="Total Projects" value={String(data?.projects?.length ?? 0)}
+          hint={`${data?.activeProjects ?? 0} active`} trend="up" />
+        <Stat icon={Users} label="Active Clients" value={String(data?.activeClients ?? 0)}
+          hint="In CRM" trend="neutral" />
+        <Stat icon={DollarSign} label="Total Revenue" value={`₹${(data?.totalRevenue ?? 0).toLocaleString()}`}
+          hint="Sum of sold prices" trend="up" color="text-green-500" />
+        <Stat icon={CheckSquare} label="Pending Tasks" value={String(data?.pendingTasks?.length ?? 0)}
+          hint={`${(data?.tasks ?? []).filter(t => t.status === "in_progress").length} in progress`} />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
+        {/* Revenue Chart */}
         <Card className="lg:col-span-2 surface-card border shadow-sm">
           <CardHeader>
             <CardTitle>Revenue Trends</CardTitle>
-            <CardDescription>Value of deals created over time</CardDescription>
+            <CardDescription>Sold price of projects by month</CardDescription>
           </CardHeader>
           <CardContent className="h-72">
-            {revenueChartData.length > 0 ? (
+            {(data?.revenueChartData ?? []).length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={revenueChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <AreaChart data={data!.revenueChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                   <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={v => `$${v}`} />
-                  <RechartsTooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px' }} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={v => `₹${v}`} />
+                  <RechartsTooltip contentStyle={{ backgroundColor: "hsl(var(--card))", borderRadius: "8px" }}
+                    formatter={(val: any) => [`₹${Number(val).toLocaleString()}`, "Revenue"]} />
                   <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorValue)" />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full grid place-items-center text-muted-foreground text-sm">Not enough deal data</div>
+              <div className="h-full grid place-items-center text-muted-foreground text-sm">
+                No project data yet — add projects with a sold price to see trends
+              </div>
             )}
           </CardContent>
         </Card>
 
         <div className="space-y-6">
+          {/* Action Items: Upcoming Task Deadlines */}
           <Card className="surface-card">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2">
-                <BellRing className="size-4 text-amber-500" /> Action Items
+                <BellRing className="size-4 text-amber-500" /> Upcoming Deadlines
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {upcomingRenewals.length > 0 && (
-                <div className="p-3 bg-amber-500/10 text-amber-900 dark:text-amber-200 rounded-lg text-sm flex items-start gap-3">
-                  <AlertTriangle className="size-5 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold">Upcoming Renewals</p>
-                    <p className="opacity-90">{upcomingRenewals.length} service(s) renewing in 30 days.</p>
-                  </div>
-                </div>
+            <CardContent className="space-y-3">
+              {(data?.upcomingDeadlines ?? []).length === 0 && (
+                <p className="text-sm text-muted-foreground">No upcoming task deadlines.</p>
               )}
-              
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Priority Tasks</p>
-                {data?.tasks?.length === 0 && <p className="text-sm text-muted-foreground">No pending tasks.</p>}
-                {data?.tasks?.map((task: any) => (
-                  <div key={task.id} className="flex items-center justify-between gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{task.title}</p>
-                      <p className="text-xs text-muted-foreground">Due: {task.deadline ? new Date(task.deadline).toLocaleDateString() : 'None'}</p>
-                    </div>
-                    <Badge variant={task.status === 'in_progress' ? 'default' : 'secondary'} className="text-[10px] shrink-0">
-                      {task.status.replace('_', ' ')}
-                    </Badge>
+              {(data?.upcomingDeadlines ?? []).map((task: any) => (
+                <div key={task.id} className="flex items-center justify-between gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{task.title}</p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Calendar className="size-3" />
+                      {new Date(task.deadline).toLocaleDateString()}
+                    </p>
                   </div>
-                ))}
-              </div>
+                  <Badge
+                    variant={task.priority === "high" ? "destructive" : task.status === "in_progress" ? "default" : "secondary"}
+                    className="text-[10px] shrink-0 capitalize"
+                  >
+                    {task.priority}
+                  </Badge>
+                </div>
+              ))}
             </CardContent>
           </Card>
 
+          {/* Recent Activity */}
           <Card className="surface-card">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2">
@@ -184,7 +188,8 @@ function Dashboard() {
                     <div>
                       <p className="text-foreground">{a.content || `${a.entity_type} updated`}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {new Date(a.created_at).toLocaleDateString()} at {new Date(a.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        {new Date(a.created_at).toLocaleDateString()} at{" "}
+                        {new Date(a.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </p>
                     </div>
                   </div>
