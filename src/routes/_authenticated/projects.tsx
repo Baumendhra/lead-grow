@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Plus, Clock, AlertCircle, CheckCircle2, ChevronRight, ChevronLeft,
-  Layers, DollarSign, Calendar, Building2, Trash2
+  Layers, DollarSign, Calendar, Building2, Trash2, Link
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -38,6 +38,7 @@ function ProjectsPage() {
   const [newProjectClientId, setNewProjectClientId] = useState("none");
   const [newProjectStatus, setNewProjectStatus] = useState("active");
   const [newProjectDeadline, setNewProjectDeadline] = useState("");
+  const [newProjectUrl, setNewProjectUrl] = useState("");
 
   // New Task State
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -97,6 +98,7 @@ function ProjectsPage() {
         client_id: newProjectClientId === "none" ? undefined : newProjectClientId,
         status: newProjectStatus,
         deadline: newProjectDeadline || null,
+        project_url: newProjectUrl || null,
         created_by: user.id,
       });
       if (error) throw error;
@@ -110,6 +112,7 @@ function ProjectsPage() {
       setNewProjectClientId("none");
       setNewProjectStatus("active");
       setNewProjectDeadline("");
+      setNewProjectUrl("");
       qc.invalidateQueries({ queryKey: ["projects"] });
     },
     onError: (e: any) => toast.error(e.message),
@@ -288,6 +291,14 @@ function ProjectsPage() {
               </div>
 
               <div className="space-y-1.5">
+                <Label>Project Link (URL)</Label>
+                <div className="relative">
+                  <Link className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={newProjectUrl} onChange={e => setNewProjectUrl(e.target.value)} placeholder="https://..." className="pl-9" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
                 <Label>Status</Label>
                 <Select value={newProjectStatus} onValueChange={setNewProjectStatus}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -356,6 +367,11 @@ function ProjectsPage() {
                     <span className="flex items-center gap-1">
                       <Calendar className="size-3" /> {new Date(p.deadline).toLocaleDateString()}
                     </span>
+                  )}
+                  {p.project_url && (
+                    <a href={p.project_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline" onClick={e => e.stopPropagation()}>
+                      <Link className="size-3" /> Link
+                    </a>
                   )}
                 </div>
                 {isSelected && (

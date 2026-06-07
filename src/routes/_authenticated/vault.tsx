@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { KeyRound, Plus, Eye, EyeOff, Copy, Layers, Globe, Trash2 } from "lucide-react";
+import { KeyRound, Plus, Eye, EyeOff, Copy, Layers, Globe, Trash2, Lock, Unlock } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/vault")({
@@ -71,6 +71,43 @@ function CredCard({ c, onReveal, revealed, onDelete }: { c: any; onReveal: () =>
   );
 }
 
+function LockScreen({
+  isSet,
+  onSetPassword,
+  onUnlock,
+  isPending
+}: {
+  isSet: boolean;
+  onSetPassword: (pw: string) => void;
+  onUnlock: (pw: string) => void;
+  isPending: boolean;
+}) {
+  const [pw, setPw] = useState("");
+  return (
+    <Card className="surface-card p-6 flex flex-col items-center justify-center text-center space-y-4 w-full">
+      <div className="size-12 rounded-full bg-muted grid place-items-center">
+        <Lock className="size-6 text-muted-foreground" />
+      </div>
+      <div>
+        <h3 className="font-semibold text-lg">{isSet ? "Vault Locked" : "Set Vault Password"}</h3>
+        <p className="text-sm text-muted-foreground">
+          {isSet ? "Enter password to reveal credentials." : "Create a password to secure this vault section."}
+        </p>
+      </div>
+      <div className="flex w-full max-w-sm items-center gap-2">
+        <Input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="Password..." />
+        <Button disabled={!pw || isPending} onClick={() => {
+          if (isSet) onUnlock(pw);
+          else onSetPassword(pw);
+          setPw("");
+        }}>
+          {isSet ? <><Unlock className="size-4 mr-2" /> Unlock</> : "Set Password"}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 function VaultPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -83,10 +120,22 @@ function VaultPage() {
     project_id: "none",
   });
 
+  const [unlockedGeneral, setUnlockedGeneral] = useState(false);
+  const [unlockedProjects, setUnlockedProjects] = useState<Record<string, boolean>>({});
+  const [passwordInput, setPasswordInput] = useState("");
+
+  const { data: appSettings } = useQuery({
+    queryKey: ["app_settings"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("app_settings").select("*").eq("id", "general").single();
+      return data;
+    },
+  });
+
   const { data: projects = [] } = useQuery({
     queryKey: ["projects"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("projects").select("id, name").order("name");
+      const { data } = await (supabase as any).from("projects").select("id, name, vault_password").order("name");
       return (data ?? []) as any[];
     },
   });
@@ -135,6 +184,37 @@ function VaultPage() {
       toast.success("Credential deleted");
       setDeleteCredId(null);
       qc.invalidateQueries({ queryKey: ["credentials"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const setGeneralPassword = useMutation({
+    mutationFn: async (password: string) => {
+      const { error } = await (supabase as any).from("app_settings").upsert({
+        id: "general",
+        value: password,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("General password set");
+      setUnlockedGeneral(true);
+      setPasswordInput("");
+      qc.invalidateQueries({ queryKey: ["app_settings"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const setProjectPassword = useMutation({
+    mutationFn: async ({ id, password }: { id: string; password: string }) => {
+      const { error } = await (supabase as any).from("projects").update({ vault_password: password }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      toast.success("Project password set");
+      setUnlockedProjects(prev => ({ ...prev, [variables.id]: true }));
+      setPasswordInput("");
+      qc.invalidateQueries({ queryKey: ["projects"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -255,21 +335,39 @@ function VaultPage() {
 
       {/* General Section */}
       {activeSection === "general" && (
-        <div>
-          {generalCreds.length === 0 && !error ? (
-            <Card className="surface-card p-10 text-center">
-              <Globe className="size-10 mx-auto text-muted-foreground" />
-              <p className="mt-3 font-medium">No general credentials</p>
-              <p className="text-sm text-muted-foreground">Add credentials not tied to any project.</p>
-            </Card>
+        <div className="space-y-4">
+          {(!appSettings?.value || !unlockedGeneral) ? (
+            <LockScreen
+              isSet={!!appSettings?.value}
+              isPending={setGeneralPassword.isPending}
+              onSetPassword={pw => setGeneralPassword.mutate(pw)}
+              onUnlock={pw => {
+                if (pw === appSettings?.value) {
+                  setUnlockedGeneral(true);
+                  toast.success("Unlocked");
+                } else {
+                  toast.error("Incorrect password");
+                }
+              }}
+            />
           ) : (
-            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {generalCreds.map((c: any) => (
-                <CredCard key={c.id} c={c} revealed={!!reveal[c.id]}
-                  onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))}
-                  onDelete={() => setDeleteCredId(c.id)} />
-              ))}
-            </div>
+            <>
+              {generalCreds.length === 0 && !error ? (
+                <Card className="surface-card p-10 text-center w-full">
+                  <Globe className="size-10 mx-auto text-muted-foreground" />
+                  <p className="mt-3 font-medium">No general credentials</p>
+                  <p className="text-sm text-muted-foreground">Add credentials not tied to any project.</p>
+                </Card>
+              ) : (
+                <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {generalCreds.map((c: any) => (
+                    <CredCard key={c.id} c={c} revealed={!!reveal[c.id]}
+                      onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))}
+                      onDelete={() => setDeleteCredId(c.id)} />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -298,41 +396,89 @@ function VaultPage() {
             ) : (
               Object.entries(credsByProject).map(([pid, pCreds]) => {
                 const proj = projects.find((p: any) => p.id === pid);
+                const isSet = !!proj?.vault_password;
+                const isUnlocked = unlockedProjects[pid];
+
                 return (
-                  <div key={pid}>
-                    <div className="flex items-center gap-2 mb-3">
+                  <div key={pid} className="space-y-3">
+                    <div className="flex items-center gap-2">
                       <Layers className="size-4 text-primary" />
                       <h3 className="font-semibold">{proj?.name ?? "Unknown Project"}</h3>
                       <Badge variant="secondary" className="text-xs">{(pCreds as any[]).length}</Badge>
+                      {isUnlocked && <Unlock className="size-3 text-green-500 ml-2" />}
                     </div>
-                    <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-                      {(pCreds as any[]).map((c: any) => (
-                        <CredCard key={c.id} c={c} revealed={!!reveal[c.id]}
-                          onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))}
-                          onDelete={() => setDeleteCredId(c.id)} />
-                      ))}
-                    </div>
+                    {(!isSet || !isUnlocked) ? (
+                      <LockScreen
+                        isSet={isSet}
+                        isPending={setProjectPassword.isPending}
+                        onSetPassword={pw => setProjectPassword.mutate({ id: pid, password: pw })}
+                        onUnlock={pw => {
+                          if (pw === proj?.vault_password) {
+                            setUnlockedProjects(prev => ({ ...prev, [pid]: true }));
+                            toast.success("Unlocked");
+                          } else {
+                            toast.error("Incorrect password");
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {(pCreds as any[]).map((c: any) => (
+                          <CredCard key={c.id} c={c} revealed={!!reveal[c.id]}
+                            onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))}
+                            onDelete={() => setDeleteCredId(c.id)} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })
             )
           ) : (
             // Filtered to one project
-            <div>
-              {filteredProjectCreds.length === 0 ? (
-                <Card className="surface-card p-10 text-center">
-                  <Layers className="size-10 mx-auto text-muted-foreground" />
-                  <p className="mt-3 font-medium">No credentials for this project yet</p>
-                </Card>
-              ) : (
-                <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {filteredProjectCreds.map((c: any) => (
-                    <CredCard key={c.id} c={c} revealed={!!reveal[c.id]}
-                      onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))}
-                      onDelete={() => setDeleteCredId(c.id)} />
-                  ))}
-                </div>
-              )}
+            <div className="space-y-4">
+              {(() => {
+                const proj = projects.find((p: any) => p.id === filterProjectId);
+                const isSet = !!proj?.vault_password;
+                const isUnlocked = unlockedProjects[filterProjectId];
+
+                if (!isSet || !isUnlocked) {
+                  return (
+                    <LockScreen
+                      isSet={isSet}
+                      isPending={setProjectPassword.isPending}
+                      onSetPassword={pw => setProjectPassword.mutate({ id: filterProjectId, password: pw })}
+                      onUnlock={pw => {
+                        if (pw === proj?.vault_password) {
+                          setUnlockedProjects(prev => ({ ...prev, [filterProjectId]: true }));
+                          toast.success("Unlocked");
+                        } else {
+                          toast.error("Incorrect password");
+                        }
+                      }}
+                    />
+                  );
+                }
+
+                if (filteredProjectCreds.length === 0) {
+                  return (
+                    <Card className="surface-card p-10 text-center w-full">
+                      <Layers className="size-10 mx-auto text-muted-foreground" />
+                      <p className="mt-3 font-medium">No credentials for this project yet</p>
+                    </Card>
+                  );
+                }
+
+                return (
+                  <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {filteredProjectCreds.map((c: any) => (
+                      <CredCard key={c.id} c={c} revealed={!!reveal[c.id]}
+                        onReveal={() => setReveal(r => ({ ...r, [c.id]: !r[c.id] }))}
+                        onDelete={() => setDeleteCredId(c.id)} />
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
