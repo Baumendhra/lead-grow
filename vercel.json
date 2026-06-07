@@ -2,5 +2,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".vercel/output",
   "installCommand": "npm install",
-  "framework": null
+  "framework": null,
+  "build": {
+    "env": {
+      "NODE_VERSION": "22"
+    }
+  }
 }
