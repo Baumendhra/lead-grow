@@ -12,4 +12,9 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Override default Cloudflare preset → use Vercel preset for Vercel deployments.
+  // Nitro will emit to .vercel/output which Vercel picks up automatically.
+  nitro: {
+    preset: "vercel",
+  },
 });
