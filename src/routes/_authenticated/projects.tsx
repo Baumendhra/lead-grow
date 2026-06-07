@@ -117,10 +117,9 @@ function ProjectsPage() {
       if (!user) throw new Error("Not logged in");
       const pid = activeProjectId === "all" ? (projects[0]?.id || null) : activeProjectId;
       if (!pid && projects.length === 0) throw new Error("Create a project first");
-      const { error } = await supabase.from("tasks").insert({
+      const { error } = await (supabase as any).from("tasks").insert({
         project_id: pid,
         title: newTaskTitle,
-        description: newTaskDesc,
         priority: newTaskPriority,
         deadline: newTaskDeadline || null,
         created_by: user.id,

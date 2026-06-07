@@ -16,6 +16,7 @@ import { Route as AuthenticatedVaultRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedTeamRouteImport } from './routes/_authenticated/team'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
+import { Route as AuthenticatedInvoicesRouteImport } from './routes/_authenticated/invoices'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedClientsRouteImport } from './routes/_authenticated/clients'
 
@@ -53,6 +54,11 @@ const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedInvoicesRoute = AuthenticatedInvoicesRouteImport.update({
+  id: '/invoices',
+  path: '/invoices',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -69,6 +75,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/clients': typeof AuthenticatedClientsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/invoices': typeof AuthenticatedInvoicesRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/team': typeof AuthenticatedTeamRoute
@@ -79,6 +86,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/clients': typeof AuthenticatedClientsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/invoices': typeof AuthenticatedInvoicesRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/team': typeof AuthenticatedTeamRoute
@@ -91,6 +99,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/clients': typeof AuthenticatedClientsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/invoices': typeof AuthenticatedInvoicesRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/team': typeof AuthenticatedTeamRoute
@@ -103,6 +112,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/clients'
     | '/dashboard'
+    | '/invoices'
     | '/projects'
     | '/reports'
     | '/team'
@@ -113,6 +123,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/clients'
     | '/dashboard'
+    | '/invoices'
     | '/projects'
     | '/reports'
     | '/team'
@@ -124,6 +135,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/clients'
     | '/_authenticated/dashboard'
+    | '/_authenticated/invoices'
     | '/_authenticated/projects'
     | '/_authenticated/reports'
     | '/_authenticated/team'
@@ -187,6 +199,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjectsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/invoices': {
+      id: '/_authenticated/invoices'
+      path: '/invoices'
+      fullPath: '/invoices'
+      preLoaderRoute: typeof AuthenticatedInvoicesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -207,6 +226,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedClientsRoute: typeof AuthenticatedClientsRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedInvoicesRoute: typeof AuthenticatedInvoicesRoute
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedTeamRoute: typeof AuthenticatedTeamRoute
@@ -216,6 +236,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedClientsRoute: AuthenticatedClientsRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedInvoicesRoute: AuthenticatedInvoicesRoute,
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedTeamRoute: AuthenticatedTeamRoute,
